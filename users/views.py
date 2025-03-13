@@ -15,24 +15,34 @@ class RegisterView(CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]  # 누구나 접근 가능
 
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
+    def perform_create(self, serializer):
+        """회원가입 및 JWT 토큰 생성"""
+        try:
             user = serializer.save()
             refresh = RefreshToken.for_user(user)
-            return Response(
-                {
-                    "message": "회원가입 성공",
-                    "refresh": str(refresh),
-                    "access": str(refresh.access_token),
-                },
-                status=status.HTTP_201_CREATED,
-            )
-        print("❌ 회원가입 오류:", serializer.errors)  # ✅ 추가: 에러 로그 출력
+            self.response_data = {
+                "message": "회원가입 성공",
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+            }
+        except Exception as e:
+            self.response_data = {"error": f"회원가입 중 오류 발생: {str(e)}"}
+
+    def create(self, request, *args, **kwargs):
+        """회원가입 요청 처리 및 응답"""
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            self.perform_create(serializer)
+            return Response(self.response_data, status=status.HTTP_201_CREATED)
+        print("❌ 회원가입 오류:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # ✅ 로그인한 사용자 정보 조회 API
 class UserDetailView(RetrieveAPIView):
     serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated]  # 로그인
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        """현재 로그인한 사용자만 반환"""
+        return self.request.user
